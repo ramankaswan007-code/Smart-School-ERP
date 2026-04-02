@@ -61,44 +61,54 @@ def get_db_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
 
 def init_db():
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    # 1. स्कूलों की मास्टर टेबल (Role के साथ)
-    c.execute('''CREATE TABLE IF NOT EXISTS schools 
-                 (school_id TEXT PRIMARY KEY, school_name TEXT, password TEXT, 
-                  district TEXT, created_at TEXT, role TEXT)''')
-    
-    # 2. अन्य सभी डेटा टेबल्स
-    c.execute('CREATE TABLE IF NOT EXISTS app_settings (school_id TEXT, key TEXT, value TEXT, PRIMARY KEY(school_id, key))')
-    c.execute('CREATE TABLE IF NOT EXISTS teachers (school_id TEXT, Name TEXT, Mobile TEXT, Post TEXT, Subject TEXT, PRIMARY KEY(school_id, Name))')
-    c.execute('CREATE TABLE IF NOT EXISTS subjects (school_id TEXT, name TEXT, PRIMARY KEY(school_id, name))')
-    c.execute('CREATE TABLE IF NOT EXISTS active_classes (school_id TEXT, class_name TEXT, PRIMARY KEY(school_id, class_name))')
-    c.execute('CREATE TABLE IF NOT EXISTS time_slots (school_id TEXT, slot_id INTEGER, period_name TEXT, start_time TEXT, end_time TEXT, PRIMARY KEY(school_id, slot_id))')
-    c.execute('CREATE TABLE IF NOT EXISTS timetable_data (school_id TEXT, unified_class TEXT, day TEXT, period TEXT, teacher TEXT, subject TEXT, PRIMARY KEY(school_id, unified_class, day, period))')
-    c.execute('CREATE TABLE IF NOT EXISTS subject_mapping (school_id TEXT, class_name TEXT, subject TEXT, teacher TEXT, periods INTEGER, PRIMARY KEY(school_id, class_name, subject))')
-    c.execute('CREATE TABLE IF NOT EXISTS absentees (school_id TEXT, date TEXT, teacher_name TEXT, PRIMARY KEY(school_id, date, teacher_name))')
-    c.execute('CREATE TABLE IF NOT EXISTS arrangements (school_id TEXT, date TEXT, period TEXT, unified_class TEXT, original_teacher TEXT, assigned_teacher TEXT, PRIMARY KEY(school_id, date, period, unified_class))')
-    
-    # 🌟 मास्टर लॉगिन का निर्माण (Super Admin और Default School)
-    today = str(datetime.date.today())
-    master_accounts = [
-        ('SAROTH_01', 'रा.उ.मा.वि. सारोठ (ब्यावर)', '1234', 'Beawar', today, 'admin'),
-        ('super_admin', 'SaaS Master Admin', 'Ram@245444', 'Headquarters', today, 'super_admin')
-    ]
-    
-    for account in master_accounts:
-        c.execute("INSERT OR REPLACE INTO schools VALUES (?, ?, ?, ?, ?, ?)", account)
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
         
-    # डिफ़ॉल्ट स्कूल की बेसिक सेटिंग्स
-    c.execute("INSERT OR IGNORE INTO app_settings VALUES ('SAROTH_01', 'school_name', 'राजकीय उच्च माध्यमिक विद्यालय, सारोठ (ब्यावर)')")
-    c.execute("INSERT OR IGNORE INTO app_settings VALUES ('SAROTH_01', 'session', '2025-26')")
+        # 1. स्कूलों की मास्टर टेबल (Role के साथ)
+        c.execute('''CREATE TABLE IF NOT EXISTS schools 
+                     (school_id TEXT PRIMARY KEY, school_name TEXT, password TEXT, 
+                      district TEXT, created_at TEXT, role TEXT)''')
+    
+        # 2. अन्य सभी डेटा टेबल्स
+        c.execute('CREATE TABLE IF NOT EXISTS app_settings (school_id TEXT, key TEXT, value TEXT, PRIMARY KEY(school_id, key))')
+        c.execute('CREATE TABLE IF NOT EXISTS teachers (school_id TEXT, Name TEXT, Mobile TEXT, Post TEXT, Subject TEXT, PRIMARY KEY(school_id, Name))')
+        c.execute('CREATE TABLE IF NOT EXISTS subjects (school_id TEXT, name TEXT, PRIMARY KEY(school_id, name))')
+        c.execute('CREATE TABLE IF NOT EXISTS active_classes (school_id TEXT, class_name TEXT, PRIMARY KEY(school_id, class_name))')
+        c.execute('CREATE TABLE IF NOT EXISTS time_slots (school_id TEXT, slot_id INTEGER, period_name TEXT, start_time TEXT, end_time TEXT, PRIMARY KEY(school_id, slot_id))')
+        c.execute('CREATE TABLE IF NOT EXISTS timetable_data (school_id TEXT, unified_class TEXT, day TEXT, period TEXT, teacher TEXT, subject TEXT, PRIMARY KEY(school_id, unified_class, day, period))')
+        c.execute('CREATE TABLE IF NOT EXISTS subject_mapping (school_id TEXT, class_name TEXT, subject TEXT, teacher TEXT, periods INTEGER, PRIMARY KEY(school_id, class_name, subject))')
+        c.execute('CREATE TABLE IF NOT EXISTS absentees (school_id TEXT, date TEXT, teacher_name TEXT, PRIMARY KEY(school_id, date, teacher_name))')
+        c.execute('CREATE TABLE IF NOT EXISTS arrangements (school_id TEXT, date TEXT, period TEXT, unified_class TEXT, original_teacher TEXT, assigned_teacher TEXT, PRIMARY KEY(school_id, date, period, unified_class))')
+        
+        # 🌟 मास्टर लॉगिन का निर्माण (Super Admin और Default School)
+        today = str(datetime.date.today())
+        master_accounts = [
+            ('SAROTH_01', 'रा.उ.मा.वि. सारोठ (ब्यावर)', '1234', 'Beawar', today, 'admin'),
+            ('super_admin', 'SaaS Master Admin', 'Ram@245444', 'Headquarters', today, 'super_admin')
+        ]
+        
+        for account in master_accounts:
+            c.execute("INSERT OR REPLACE INTO schools VALUES (?, ?, ?, ?, ?, ?)", account)
+            
+        # डिफ़ॉल्ट स्कूल की बेसिक सेटिंग्स
+        c.execute("INSERT OR IGNORE INTO app_settings VALUES ('SAROTH_01', 'school_name', 'राजकीय उच्च माध्यमिक विद्यालय, सारोठ (ब्यावर)')")
+        c.execute("INSERT OR IGNORE INTO app_settings VALUES ('SAROTH_01', 'session', '2025-26')")
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ Database initialization warning: {str(e)}")
+        try:
+            conn.close()
+        except:
+            pass
 
 # डेटाबेस स्वतः शुरू करें
-init_db()
+try:
+    init_db()
+except Exception as e:
+    print(f"Database init failed: {e}")
 
 # ==============================================================================
 # 4. स्मार्ट हेल्पर्स (Utilities)

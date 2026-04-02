@@ -61,7 +61,9 @@ def show_sidebar_navigation():
     with st.sidebar:
         st.markdown(f"**👤 यूजर:** {st.session_state['school_name']}")
         if st.button("🚪 लॉगआउट करें", use_container_width=True):
-            st.query_params.clear()
+            # Clear query parameters properly
+            for key in list(st.query_params.keys()):
+                del st.query_params[key]
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
             
@@ -130,9 +132,13 @@ def login_ui():
 # ==============================================================================
 # 4. मुख्य निष्पादन
 # ==============================================================================
-if st.session_state['logged_in']:
-    show_sidebar_navigation()
-else:
-    login_ui()
+try:
+    if st.session_state['logged_in']:
+        show_sidebar_navigation()
+    else:
+        login_ui()
+except Exception as e:
+    st.error(f"❌ एप्लिकेशन में त्रुटि: {str(e)}")
+    st.info("कृपया कुछ समय बाद पुनः प्रयास करें या अपने Admin से संपर्क करें।")
 
 st.markdown("<br><hr><center><small>Developed by: <b>Rohitasw Kaswan</b> | SaaS v12.6</small></center>", unsafe_allow_html=True)
