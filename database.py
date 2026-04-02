@@ -76,6 +76,7 @@ def init_db():
     c.execute('CREATE TABLE IF NOT EXISTS active_classes (school_id TEXT, class_name TEXT, PRIMARY KEY(school_id, class_name))')
     c.execute('CREATE TABLE IF NOT EXISTS time_slots (school_id TEXT, slot_id INTEGER, period_name TEXT, start_time TEXT, end_time TEXT, PRIMARY KEY(school_id, slot_id))')
     c.execute('CREATE TABLE IF NOT EXISTS timetable_data (school_id TEXT, unified_class TEXT, day TEXT, period TEXT, teacher TEXT, subject TEXT, PRIMARY KEY(school_id, unified_class, day, period))')
+    c.execute('CREATE TABLE IF NOT EXISTS subject_mapping (school_id TEXT, class_name TEXT, subject TEXT, teacher TEXT, periods INTEGER, PRIMARY KEY(school_id, class_name, subject))')
     c.execute('CREATE TABLE IF NOT EXISTS absentees (school_id TEXT, date TEXT, teacher_name TEXT, PRIMARY KEY(school_id, date, teacher_name))')
     c.execute('CREATE TABLE IF NOT EXISTS arrangements (school_id TEXT, date TEXT, period TEXT, unified_class TEXT, original_teacher TEXT, assigned_teacher TEXT, PRIMARY KEY(school_id, date, period, unified_class))')
     
@@ -106,11 +107,58 @@ init_db()
 def get_school_info(school_id):
     conn = get_db_connection()
     try:
-        n = pd.read_sql_query(f"SELECT value FROM app_settings WHERE key='school_name' AND school_id='{school_id}'", conn).iloc[0,0]
-        s = pd.read_sql_query(f"SELECT value FROM app_settings WHERE key='session' AND school_id='{school_id}'", conn).iloc[0,0]
+        n = pd.read_sql_query("SELECT value FROM app_settings WHERE key='school_name' AND school_id=?", conn, params=(school_id,)).iloc[0,0]
+        s = pd.read_sql_query("SELECT value FROM app_settings WHERE key='session' AND school_id=?", conn, params=(school_id,)).iloc[0,0]
         return n, s
-    except: return "Smart School ERP", "2025-26"
-    finally: conn.close()
+    except Exception:
+        return "Smart School ERP", "2025-26"
+    finally:
+        conn.close()
+
+def get_teachers(school_id):
+    conn = get_db_connection()
+    try:
+        return pd.read_sql_query("SELECT Name FROM teachers WHERE school_id=? ORDER BY Name", conn, params=(school_id,))['Name'].tolist()
+    finally:
+        conn.close()
+
+
+def get_subjects(school_id):
+    conn = get_db_connection()
+    try:
+        return pd.read_sql_query("SELECT name FROM subjects WHERE school_id=? ORDER BY name", conn, params=(school_id,))['name'].tolist()
+    finally:
+        conn.close()
+
+
+def get_time_slots(school_id):
+    conn = get_db_connection()
+    try:
+        return pd.read_sql_query("SELECT slot_id, period_name, start_time, end_time FROM time_slots WHERE school_id=? ORDER BY slot_id", conn, params=(school_id,))
+    finally:
+        conn.close()
+
+
+def get_timetable_data(school_id, **filters):
+    conn = get_db_connection()
+    try:
+        base = "SELECT * FROM timetable_data WHERE school_id=?"
+        params = [school_id]
+        for key, value in filters.items():
+            base += f" AND {key}=?"
+            params.append(value)
+        return pd.read_sql_query(base, conn, params=tuple(params))
+    finally:
+        conn.close()
+
+
+def get_active_classes(school_id):
+    conn = get_db_connection()
+    try:
+        return [r[0] for r in conn.execute("SELECT class_name FROM active_classes WHERE school_id=?", (school_id,)).fetchall()]
+    finally:
+        conn.close()
+
 
 def safe_sort(lst):
     """कक्षाओं को सही क्रम (1, 2, 10, 11) में लगाने के लिए"""
@@ -172,6 +220,8 @@ def load_css():
         .header-box { background: linear-gradient(135deg, #00695c, #004d40); padding: 25px; border-radius: 12px; text-align: center; margin-bottom: 25px; color: white !important; }
         .header-box h1 { color: white !important; margin: 0; font-size: 2.2rem; }
         [data-testid="stSidebar"] { background-color: #f1f8e9; }
+        .print-box table { width: 100%; border-collapse: collapse; }
+        .print-box th, .print-box td { border: 1px solid #333; padding: 6px; }
         @media print { [data-testid="stSidebar"], header, footer, .no-print { display: none !important; } .print-box { display: block !important; width: 100%; } }
         </style>
     """, unsafe_allow_html=True)

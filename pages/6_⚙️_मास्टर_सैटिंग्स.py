@@ -6,7 +6,7 @@
 import streamlit as st
 import pandas as pd
 import time
-from database import get_db_connection, get_school_info, get_current_school
+from database import get_db_connection, get_school_info, get_current_school, get_teachers, get_subjects, get_active_classes, get_time_slots
 
 # 🔒 जादुई सुरक्षा लॉक
 DEFAULT_SCHOOL = get_current_school()
@@ -45,11 +45,7 @@ tab_sch, tab_t, tab_act_cls, tab_sub, tab_time, tab_map = st.tabs([
 # ------------------------------------------------------------------------------
 with tab_sch:
     st.subheader("🏫 विद्यालय एवं सत्र विवरण")
-    try:
-        curr_name = pd.read_sql_query(f"SELECT value FROM app_settings WHERE key='school_name' AND school_id='{DEFAULT_SCHOOL}'", conn).iloc[0,0]
-        curr_sess = pd.read_sql_query(f"SELECT value FROM app_settings WHERE key='session' AND school_id='{DEFAULT_SCHOOL}'", conn).iloc[0,0]
-    except:
-        curr_name, curr_sess = "राजकीय विद्यालय", "2025-26"
+    curr_name, curr_sess = get_school_info(DEFAULT_SCHOOL)
     
     with st.form("sch_profile_form"):
         c1, c2 = st.columns(2)
@@ -92,7 +88,7 @@ with tab_t:
     
     st.markdown("---")
     st.write("🔻 **मौजूदा अध्यापक सूची (यहाँ सीधे एडिट या डिलीट करें):**")
-    t_df = pd.read_sql_query(f"SELECT Name, Mobile, Post, Subject FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)
+    t_df = pd.read_sql_query("SELECT Name, Mobile, Post, Subject FROM teachers WHERE school_id=?", conn, params=(DEFAULT_SCHOOL,))
     
     edited_t = st.data_editor(
         t_df, 
@@ -157,7 +153,7 @@ with tab_act_cls:
                 st.success(f"✅ {len(new_cls)} कक्षाएं जोड़ी गईं!"); time.sleep(1); st.rerun()
 
     st.write("🔻 **वर्तमान सक्रिय कक्षाएं:**")
-    curr_active = pd.read_sql_query(f"SELECT class_name FROM active_classes WHERE school_id='{DEFAULT_SCHOOL}'", conn)
+    curr_active = pd.DataFrame({'class_name': get_active_classes(DEFAULT_SCHOOL)})
     
     edited_cls = st.data_editor(
         curr_active, 
@@ -191,7 +187,7 @@ with tab_sub:
         conn.commit()
         st.success("✅ डिफ़ॉल्ट विषय लोड कर दिए गए हैं!"); time.sleep(1); st.rerun()
 
-    s_df = pd.read_sql_query(f"SELECT name FROM subjects WHERE school_id='{DEFAULT_SCHOOL}'", conn)
+    s_df = pd.DataFrame({'name': get_subjects(DEFAULT_SCHOOL)})
     if s_df.empty:
         s_df = pd.DataFrame(columns=["name"])
         st.warning("सूची खाली है। कृपया विषय जोड़ें या ऊपर से डिफ़ॉल्ट लोड करें।")
@@ -237,7 +233,7 @@ with tab_time:
         apply_time("Winter"); time.sleep(1); st.rerun()
 
     st.markdown("---")
-    ts_df = pd.read_sql_query(f"SELECT slot_id, period_name, start_time, end_time FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+    ts_df = get_time_slots(DEFAULT_SCHOOL)
     
     edited_ts = st.data_editor(
         ts_df, 
@@ -264,9 +260,9 @@ with tab_time:
 with tab_map:
     st.markdown("<div class='map-box'><h3>🔗 स्मार्ट विषय-अध्यापक मैपिंग (AI Rules)</h3><p>एक ही बार में कई कक्षाओं को चुनें और अध्यापक असाइन करें। (उदा: कक्षा 1 से 5 तक पर्यावरण के लिए एक ही अध्यापक)</p></div>", unsafe_allow_html=True)
     
-    t_list = sorted(pd.read_sql_query(f"SELECT Name FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)['Name'].tolist())
-    s_list = sorted(pd.read_sql_query(f"SELECT name FROM subjects WHERE school_id='{DEFAULT_SCHOOL}'", conn)['name'].tolist())
-    c_list = sorted(pd.read_sql_query(f"SELECT class_name FROM active_classes WHERE school_id='{DEFAULT_SCHOOL}'", conn)['class_name'].tolist())
+    t_list = sorted(get_teachers(DEFAULT_SCHOOL))
+    s_list = sorted(get_subjects(DEFAULT_SCHOOL))
+    c_list = sorted(get_active_classes(DEFAULT_SCHOOL))
     
     if not (t_list and s_list and c_list):
         st.warning("⚠️ मैपिंग शुरू करने से पहले कृपया कक्षाएं, विषय और अध्यापक जोड़ें।")
@@ -298,7 +294,7 @@ with tab_map:
                 
         st.markdown("---")
         st.write(f"🔻 **वर्तमान मैपिंग सूची:**")
-        map_df = pd.read_sql_query(f"SELECT teacher as 'अध्यापक', subject as 'विषय', class_name as 'कक्षा', periods as 'कालांश' FROM subject_mapping WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY teacher, class_name", conn)
+        map_df = pd.read_sql_query("SELECT teacher as 'अध्यापक', subject as 'विषय', class_name as 'कक्षा', periods as 'कालांश' FROM subject_mapping WHERE school_id=? ORDER BY teacher, class_name", conn, params=(DEFAULT_SCHOOL,))
         
         if not map_df.empty:
             st.dataframe(map_df, use_container_width=True, hide_index=True)

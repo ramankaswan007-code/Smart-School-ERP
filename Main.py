@@ -135,5 +135,4 @@ if st.session_state['logged_in']:
 else:
     login_ui()
 
-
-st.markdown("<br><hr><center><small>Developed by: <b>Rohitash Kaswan</b> | SaaS v12.6</small></center>", unsafe_allow_html=True)
+st.markdown("<br><hr><center><small>Developed by: <b>Rohitasw Kaswan</b> | SaaS v12.6</small></center>", unsafe_allow_html=True)

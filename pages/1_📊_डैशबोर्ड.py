@@ -9,7 +9,7 @@ import datetime
 import random
 
 # 🌟 सभी ज़रूरी चीज़ें सही तरीके से import की गई हैं
-from database import get_db_connection, get_unified_class_list, get_current_school, get_school_info, load_css, day_map
+from database import get_unified_class_list, get_current_school, get_school_info, get_teachers, get_subjects, load_css, day_map
 
 # 🔒 जादुई सुरक्षा लॉक: यह लाइन लॉगिन हुए स्कूल का ID लेकर उसे DEFAULT_SCHOOL मान लेगी
 DEFAULT_SCHOOL = get_current_school()
@@ -74,12 +74,11 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-conn = get_db_connection()
 c1, c2, c3, c4 = st.columns(4)
 
 try:
-    total_teachers = pd.read_sql_query(f"SELECT COUNT(*) FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn).iloc[0,0]
-    total_subjects = pd.read_sql_query(f"SELECT COUNT(*) FROM subjects WHERE school_id='{DEFAULT_SCHOOL}'", conn).iloc[0,0]
+    total_teachers = len(get_teachers(DEFAULT_SCHOOL))
+    total_subjects = len(get_subjects(DEFAULT_SCHOOL))
     unified_classes = get_unified_class_list(DEFAULT_SCHOOL)
     
     c1.metric("👨‍🏫 कुल अध्यापक", total_teachers, border=True)
@@ -105,4 +104,3 @@ except Exception as e:
 
 st.markdown("---")
 st.info("💡 **टिप:** टाइम टेबल भरने और रिपोर्ट देखने के लिए साइडबार (Menu) से अन्य पेज चुनें।")
-conn.close()

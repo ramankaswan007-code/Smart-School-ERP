@@ -9,7 +9,7 @@ import datetime
 import urllib.parse
 
 # 🌟 बदलाव: DEFAULT_SCHOOL की जगह get_current_school इम्पोर्ट किया गया है
-from database import get_db_connection, day_map, show_print_preview, get_school_info, get_current_school
+from database import get_db_connection, day_map, show_print_preview, get_school_info, get_current_school, get_teachers
 
 # 🔒 जादुई सुरक्षा लॉक: यह लाइन लॉगिन हुए स्कूल का ID लेकर उसे DEFAULT_SCHOOL मान लेगी
 DEFAULT_SCHOOL = get_current_school()
@@ -29,7 +29,7 @@ arrange_date = c_date.date_input("तारीख (Date):", datetime.date.today(
 target_day = day_map.get(arrange_date.strftime("%A"), "Sunday")
 
 # 🌟 बदलाव: केवल वर्तमान स्कूल के अध्यापक
-all_teachers = pd.read_sql_query(f"SELECT Name FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)['Name'].tolist()
+all_teachers = get_teachers(DEFAULT_SCHOOL)
 absent_teachers = c_absent.multiselect("अनुपस्थित शिक्षक चुनें:", all_teachers)
 
 if target_day == "Sunday":

@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 
 # 🌟 बदलाव: DEFAULT_SCHOOL की जगह get_current_school इम्पोर्ट किया गया
-from database import get_db_connection, get_unified_class_list, get_short_code, show_print_preview, get_school_info, get_current_school
+from database import get_db_connection, get_unified_class_list, get_short_code, show_print_preview, get_school_info, get_current_school, get_teachers, get_subjects, get_time_slots, get_timetable_data
 
 # 🔒 जादुई सुरक्षा लॉक: यह लाइन लॉगिन हुए स्कूल का ID लेकर उसे DEFAULT_SCHOOL मान लेगी
 DEFAULT_SCHOOL = get_current_school()
@@ -37,10 +37,10 @@ with tab_master:
     st.subheader("📑 समेकित समय सारणी (Format: टीचर / विषय / दिन)")
     st.info("💡 **दिन संकेत:** 1=सोम, 2=मंगल, 3=बुध, 4=गुरु, 5=शुक्र, 6=शनि")
     
-    df = pd.read_sql_query(f"SELECT * FROM timetable_data WHERE school_id='{DEFAULT_SCHOOL}'", conn)
-    slots = pd.read_sql_query(f"SELECT period_name, slot_id, start_time, end_time FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
-    all_teachers = pd.read_sql_query(f"SELECT Name FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)['Name'].tolist()
-    all_subjects = pd.read_sql_query(f"SELECT name FROM subjects WHERE school_id='{DEFAULT_SCHOOL}'", conn)['name'].tolist()
+    df = get_timetable_data(DEFAULT_SCHOOL)
+    slots = get_time_slots(DEFAULT_SCHOOL)
+    all_teachers = get_teachers(DEFAULT_SCHOOL)
+    all_subjects = get_subjects(DEFAULT_SCHOOL)
     
     if df.empty:
         st.warning("⚠️ डेटाबेस खाली है। कृपया पहले टाइम टेबल सेट करें।")
@@ -162,7 +162,6 @@ with tab_master:
             </style>
             </head>
             <body>
-                <h3 style="text-align:center;">समेकित समय सारणी - {SCHOOL_NAME}</h3>
                 {final_df.to_html(classes='table', escape=False, border=1, index=False)}
                 <div class="legend">
                     <b>संकेत:</b> (1=सोम, 2=मंगल, 3=बुध, 4=गुरु, 5=शुक्र, 6=शनि)<br>
@@ -202,6 +201,8 @@ with tab_class:
                     .class-table {{ width:100%; border-collapse: collapse; font-size:11px; table-layout: fixed; }}
                     .class-table th, .class-table td {{ border:1px solid #333; padding:4px; text-align:center; vertical-align: top; word-break: break-word; }}
                     .class-table th {{ background:#eee; }}
+                    .class-table td.period-cell {{ background:#f5f5f0; font-weight:600; }}
+                    .class-table tr.break-row td {{ background:#faf8e6; color:#333; }}
                     .class-table td div {{ display:block; padding:3px; border-radius:4px; background:#f9f9f9; min-height: auto; }}
                     @media print {{
                         body {{ margin: 5mm; }}
@@ -213,7 +214,7 @@ with tab_class:
             """
             full_html = header_html
             for cls in sel_classes:
-                cls_df = pd.read_sql_query("SELECT * FROM timetable_data WHERE school_id=? AND unified_class=?", conn, params=(DEFAULT_SCHOOL, cls))
+                cls_df = get_timetable_data(DEFAULT_SCHOOL, unified_class=cls)
                 full_html += f"""
                 <div class='class-card'>
                     <h2>कक्षा: {cls}</h2>
@@ -228,20 +229,24 @@ with tab_class:
                             <th>शनि</th>
                         </tr>
                 """
-                slot_rows = pd.read_sql_query(f"SELECT period_name, start_time, end_time FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+                slot_rows = get_time_slots(DEFAULT_SCHOOL)
                 time_map = {row['period_name']: f"{row['start_time']} - {row['end_time']}" for _, row in slot_rows.iterrows()}
                 valid_periods = slot_rows['period_name'].tolist()
                 for p in valid_periods:
                     slot_time = time_map.get(p, "")
-                    full_html += f"<tr><td><div style='font-size:12px; font-weight:bold;'>{p}</div><div style='font-size:10px; color:#555; margin-top:4px;'>{slot_time}</div></td>"
+                    row_style = 'background:#faf8e6;' if p in ['प्रार्थना सभा', 'मध्यांतर'] else ''
+                    first_td_style = 'border:1px solid #999; padding:4px; background:#f5f5f0;'
+                    cell_bg = 'background:#faf8e6;' if p in ['प्रार्थना सभा', 'मध्यांतर'] else ''
+                    full_html += f"<tr style='{row_style}'>"
+                    full_html += f"<td style='{first_td_style}'><div style='font-size:12px; font-weight:bold;'>{p}</div><div style='font-size:10px; color:#555; margin-top:4px;'>{slot_time}</div></td>"
                     for d in ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार"]:
                         cell = cls_df[(cls_df['day'] == d) & (cls_df['period'] == p)]
                         if not cell.empty:
                             t_name = cell.iloc[0]['teacher']
                             sub = cell.iloc[0]['subject']
-                            full_html += f"<td><div><b>{t_name}</b><br>{sub}</div></td>"
+                            full_html += f"<td style='border:1px solid #999; text-align:center; {cell_bg}'><div style='background:transparent;'><b>{t_name}</b><br>{sub}</div></td>"
                         else:
-                            full_html += "<td>-</td>"
+                            full_html += f"<td style='border:1px solid #999; text-align:center; {cell_bg}'>-</td>"
                     full_html += "</tr>"
                 full_html += "</table></div>"
             full_html += "</div>"
@@ -252,7 +257,7 @@ with tab_class:
 # ------------------------------------------------------------------------------
 with tab_teacher:
     st.subheader("👨‍🏫 अध्यापक रिपोर्ट")
-    all_teachers = pd.read_sql_query(f"SELECT Name FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)['Name'].tolist()
+    all_teachers = get_teachers(DEFAULT_SCHOOL)
     sel_teachers = st.multiselect("अध्यापक चुनें:", all_teachers)
     
     if st.button("🖨️ अध्यापक टाइम टेबल प्रिंट करें"):
@@ -260,7 +265,7 @@ with tab_teacher:
         else:
             full_html = ""
             for tch in sel_teachers:
-                t_df = pd.read_sql_query("SELECT * FROM timetable_data WHERE school_id=? AND teacher=?", conn, params=(DEFAULT_SCHOOL, tch))
+                t_df = get_timetable_data(DEFAULT_SCHOOL, teacher=tch)
                 full_html += f"""
                 <div style='page-break-inside: avoid; border: 1px solid #333; margin-bottom: 20px; padding: 10px;'>
                     <h3 style='margin:0 0 5px 0;'>👨‍🏫 {tch}</h3>
@@ -275,12 +280,14 @@ with tab_teacher:
                             <th style='border:1px solid #999; padding:4px;'>शनि</th>
                         </tr>
                 """
-                slot_rows = pd.read_sql_query(f"SELECT period_name, start_time, end_time FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+                slot_rows = get_time_slots(DEFAULT_SCHOOL)
                 time_map = {row['period_name']: f"{row['start_time']} - {row['end_time']}" for _, row in slot_rows.iterrows()}
                 valid_periods = slot_rows['period_name'].tolist()
                 for p in valid_periods:
                     slot_time = time_map.get(p, "")
-                    full_html += f"<tr><td style='border:1px solid #999; padding:4px;'><div style='font-weight:bold;'>{p}</div><div style='font-size:10px; color:#555; margin-top:2px;'>{slot_time}</div></td>"
+                    row_style = "background:#faf8e6;" if p in ['प्रार्थना सभा', 'मध्यांतर'] else ""
+                    first_td_style = "border:1px solid #999; padding:4px; background:#f5f5f0;"
+                    full_html += f"<tr style='{row_style}'><td style='{first_td_style}'><div style='font-weight:bold;'>{p}</div><div style='font-size:10px; color:#555; margin-top:2px;'>{slot_time}</div></td>"
                     for d in ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार"]:
                         cell = t_df[(t_df['day'] == d) & (t_df['period'] == p)]
                         if not cell.empty:
@@ -299,13 +306,48 @@ with tab_teacher:
 with tab_load:
     st.subheader("📊 अध्यापक कार्यभार")
     try:
-        workload_df = pd.read_sql_query(f"SELECT teacher as 'अध्यापक', COUNT(*) as 'Periods' FROM timetable_data WHERE school_id='{DEFAULT_SCHOOL}' GROUP BY teacher ORDER BY Periods DESC", conn)
-        if not workload_df.empty:
-            c1, c2 = st.columns([2,1])
-            c1.bar_chart(workload_df.set_index('अध्यापक'))
-            c2.dataframe(workload_df, use_container_width=True, hide_index=True)
-        else: st.info("डेटा उपलब्ध नहीं।")
-    except: st.error("Error loading workload.")
+        workload_df = pd.read_sql_query("SELECT teacher as 'अध्यापक', COUNT(*) as 'Periods' FROM timetable_data WHERE school_id=? GROUP BY teacher ORDER BY Periods DESC", conn, params=(DEFAULT_SCHOOL,))
+        if workload_df.empty:
+            st.info("डेटा उपलब्ध नहीं।")
+        else:
+            workload_df['Periods'] = workload_df['Periods'].astype(int)
+            workload_df['Level'] = workload_df['Periods'].apply(lambda x: 'अधिक' if x >= 6 else ('मध्यम' if x >= 4 else 'कम'))
+
+            total_teachers = len(workload_df)
+            total_periods = int(workload_df['Periods'].sum())
+            avg_periods = round(workload_df['Periods'].mean(), 1)
+            busiest = workload_df.iloc[0]
+            least_busy = workload_df.iloc[-1]
+
+            kpi1, kpi2, kpi3 = st.columns(3)
+            kpi1.metric("कुल अध्यापक", total_teachers)
+            kpi2.metric("कुल कालांश", total_periods)
+            kpi3.metric("औसत प्रति अध्यापक", avg_periods)
+
+            st.markdown("---")
+
+            top_cards = st.columns(2)
+            top_cards[0].metric("सबसे व्यस्त", busiest['अध्यापक'], f"{busiest['Periods']} कालांश")
+            top_cards[1].metric("सबसे कम कार्यभार", least_busy['अध्यापक'], f"{least_busy['Periods']} कालांश")
+
+            st.markdown("---")
+
+            chart_col, table_col = st.columns([2, 1])
+            chart_col.bar_chart(workload_df.set_index('अध्यापक')[['Periods']])
+            table_col.dataframe(workload_df[['अध्यापक', 'Periods', 'Level']].rename(columns={'Periods': 'कालांश', 'Level': 'स्तर'}), use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+
+            sel_teacher = st.selectbox("किस अध्यापक का विवरण देखें:", ["सभी अध्यापक"] + workload_df['अध्यापक'].tolist())
+            if sel_teacher != "सभी अध्यापक":
+                teacher_df = pd.read_sql_query("SELECT day as 'दिन', period as 'कालांश', subject as 'विषय', unified_class as 'कक्षा' FROM timetable_data WHERE school_id=? AND teacher=? ORDER BY day, period", conn, params=(DEFAULT_SCHOOL, sel_teacher))
+                if teacher_df.empty:
+                    st.warning("इस अध्यापक के लिए कोई टाइमटेबल रिकॉर्ड नहीं मिला।")
+                else:
+                    st.write(f"### ✏️ {sel_teacher} का टाइमटेबल")
+                    st.dataframe(teacher_df, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Error loading workload: {e}")
 
 # ------------------------------------------------------------------------------
 # Tab 5: रिक्त कालांश (Free Periods)
@@ -314,8 +356,8 @@ with tab_free:
     st.subheader("🈳 रिक्त कालांश")
     sel_day_free = st.selectbox("दिन चुनें:", ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार"])
     if st.button("🔍 चेक करें"):
-        all_t = pd.read_sql_query(f"SELECT Name FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)['Name'].tolist()
-        slots = pd.read_sql_query(f"SELECT period_name FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+        all_t = get_teachers(DEFAULT_SCHOOL)
+        slots = get_time_slots(DEFAULT_SCHOOL)
         valid_p = [p for p in slots['period_name'] if p not in ["प्रार्थना सभा", "मध्यांतर"]]
         res = []
         for p in valid_p:

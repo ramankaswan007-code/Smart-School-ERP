@@ -8,7 +8,7 @@ import pandas as pd
 import datetime
 
 # 🌟 बदलाव: DEFAULT_SCHOOL की जगह get_current_school इम्पोर्ट किया गया है
-from database import get_db_connection, day_map, get_current_school
+from database import get_db_connection, day_map, get_current_school, get_time_slots, get_teachers
 
 # 🔒 जादुई सुरक्षा लॉक: यह लाइन लॉगिन हुए स्कूल का ID लेकर उसे DEFAULT_SCHOOL मान लेगी
 DEFAULT_SCHOOL = get_current_school()
@@ -29,7 +29,7 @@ c1.info(f"🕒 समय: **{now.strftime('%I:%M %p')}**")
 c2.info(f"📅 दिन: **{curr_day_name}**")
 
 # 2. वर्तमान कालांश (Period) का पता लगाना
-all_slots = pd.read_sql_query(f"SELECT * FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+all_slots = get_time_slots(DEFAULT_SCHOOL)
 
 current_period = None
 for i, row in all_slots.iterrows():
@@ -63,7 +63,7 @@ elif display_period:
     )
     
     # सभी शिक्षक
-    all_teachers = pd.read_sql_query(f"SELECT Name FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)['Name'].tolist()
+    all_teachers = get_teachers(DEFAULT_SCHOOL)
     
     # फ्री शिक्षक 
     busy_teachers_list = busy_df['teacher'].tolist()
