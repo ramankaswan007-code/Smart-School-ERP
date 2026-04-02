@@ -38,7 +38,7 @@ with tab_master:
     st.info("💡 **दिन संकेत:** 1=सोम, 2=मंगल, 3=बुध, 4=गुरु, 5=शुक्र, 6=शनि")
     
     df = pd.read_sql_query(f"SELECT * FROM timetable_data WHERE school_id='{DEFAULT_SCHOOL}'", conn)
-    slots = pd.read_sql_query(f"SELECT period_name, slot_id FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+    slots = pd.read_sql_query(f"SELECT period_name, slot_id, start_time, end_time FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
     all_teachers = pd.read_sql_query(f"SELECT Name FROM teachers WHERE school_id='{DEFAULT_SCHOOL}'", conn)['Name'].tolist()
     all_subjects = pd.read_sql_query(f"SELECT name FROM subjects WHERE school_id='{DEFAULT_SCHOOL}'", conn)['name'].tolist()
     
@@ -74,16 +74,19 @@ with tab_master:
         
         # --- STEP 4: मैट्रिक्स बनाना ---
         classes = get_unified_class_list(DEFAULT_SCHOOL)
-        period_names = [p for p in slots['period_name'] if p not in ["प्रार्थना सभा", "मध्यांतर"]]
+        period_names = slots['period_name'].tolist()
+        time_map = {row['period_name']: f"{row['start_time']}-{row['end_time']}" for _, row in slots.iterrows()}
+        period_labels = [f"{p}<br><span style='font-size:0.8em;'>{time_map.get(p, '')}</span>" for p in period_names]
         
-        matrix_data = {p: [] for p in period_names}
-        matrix_data['Class'] = classes
+        matrix_data = {label: [] for label in period_labels}
+        matrix_data['Class / कालांश'] = []
         
         for cls in classes:
-            for p in period_names:
+            matrix_data['Class / कालांश'].append(cls)
+            for label, p in zip(period_labels, period_names):
                 cell_data = df[(df['unified_class'] == cls) & (df['period'] == p)]
                 if cell_data.empty:
-                    matrix_data[p].append("-")
+                    matrix_data[label].append("-")
                 else:
                     groups = {} 
                     for _, row in cell_data.iterrows():
@@ -111,14 +114,15 @@ with tab_master:
                         day_str = ",".join(ranges)
                         if day_str == "1-6": day_str = "All"
                         
-                        line = f"<b>{tc}</b> <span style='font-size:0.8em'>/{sc}/</span> {day_str}"
+                        line = f"<div style='margin:2px 0; padding:4px; border:1px solid #c8e6c9; background:#e8f5e9; border-radius:6px; text-align:left; line-height:1.2;'><b>{tc}</b> <span style='font-size:0.8em'>/{sc}/</span> <span style='float:right; font-size:0.75em; color:#555;'>{day_str}</span></div>"
                         cell_html_lines.append(line)
                     
-                    matrix_data[p].append("<br>".join(cell_html_lines))
+                    matrix_data[label].append("".join(cell_html_lines))
 
         # --- STEP 5: डिस्प्ले और प्रिंट ---
         final_df = pd.DataFrame(matrix_data)
-        final_df = final_df.set_index('Class')
+        cols = ['Class / कालांश'] + period_labels
+        final_df = final_df[cols]
         
         st.write("### 📅 मास्टर चार्ट (Pro Preview)")
         
@@ -131,7 +135,7 @@ with tab_master:
         </style>
         """, unsafe_allow_html=True)
         
-        st.markdown(f"<div class='table-container'>{final_df.to_html(escape=False)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='table-container'>{final_df.to_html(index=False, escape=False)}</div>", unsafe_allow_html=True)
         
         st.markdown("---")
         
@@ -159,7 +163,7 @@ with tab_master:
             </head>
             <body>
                 <h3 style="text-align:center;">समेकित समय सारणी - {SCHOOL_NAME}</h3>
-                {final_df.to_html(classes='table', escape=False, border=1)}
+                {final_df.to_html(classes='table', escape=False, border=1, index=False)}
                 <div class="legend">
                     <b>संकेत:</b> (1=सोम, 2=मंगल, 3=बुध, 4=गुरु, 5=शुक्र, 6=शनि)<br>
                     <b>अध्यापक:</b> {", ".join([f"{k}={v}" for k,v in t_map.items()])}
@@ -180,37 +184,67 @@ with tab_class:
     if st.button("🖨️ कक्षा कार्ड प्रिंट करें"):
         if not sel_classes: st.error("कृपया कक्षा चुनें।")
         else:
-            full_html = ""
+            header_html = f"""
+                <style>
+                    body {{ font-family: sans-serif; margin: 10px; color: #111; background: #fff; }}
+                    .class-print-wrapper {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }}
+                    .class-card {{
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                        border: 2px solid #333;
+                        margin-bottom: 15px;
+                        padding: 10px;
+                        width: calc(50% - 10px);
+                        box-sizing: border-box;
+                        background: #fff;
+                    }}
+                    .class-card h2 {{ margin: 0 0 8px 0; font-size: 14px; background:#000; color:#fff; padding:4px; text-align:center; }}
+                    .class-table {{ width:100%; border-collapse: collapse; font-size:11px; table-layout: fixed; }}
+                    .class-table th, .class-table td {{ border:1px solid #333; padding:4px; text-align:center; vertical-align: top; word-break: break-word; }}
+                    .class-table th {{ background:#eee; }}
+                    .class-table td div {{ display:block; padding:3px; border-radius:4px; background:#f9f9f9; min-height: auto; }}
+                    @media print {{
+                        body {{ margin: 5mm; }}
+                        .class-print-wrapper {{ display: block; }}
+                        .class-card {{ width: 100% !important; margin: 0 0 15px 0; page-break-after: auto; break-inside: avoid; }}
+                    }}
+                </style>
+                <div class='class-print-wrapper'>
+            """
+            full_html = header_html
             for cls in sel_classes:
                 cls_df = pd.read_sql_query("SELECT * FROM timetable_data WHERE school_id=? AND unified_class=?", conn, params=(DEFAULT_SCHOOL, cls))
                 full_html += f"""
-                <div style='page-break-inside: avoid; border: 2px solid #333; margin-bottom: 15px; padding: 5px; width: 48%; float: left; margin-right: 1%; box-sizing: border-box;'>
-                    <div style='background:#000; color:#fff; text-align:center; font-weight:bold; padding:2px;'>कक्षा: {cls}</div>
-                    <table style='width:100%; border-collapse: collapse; margin-top:5px; font-size:10px;'>
-                        <tr style='background:#eee;'>
-                            <th style='border:1px solid #333;'>कालांश</th>
-                            <th style='border:1px solid #333;'>सोम</th>
-                            <th style='border:1px solid #333;'>मंगल</th>
-                            <th style='border:1px solid #333;'>बुध</th>
-                            <th style='border:1px solid #333;'>गुरु</th>
-                            <th style='border:1px solid #333;'>शुक्र</th>
-                            <th style='border:1px solid #333;'>शनि</th>
+                <div class='class-card'>
+                    <h2>कक्षा: {cls}</h2>
+                    <table class='class-table'>
+                        <tr>
+                            <th>कालांश</th>
+                            <th>सोम</th>
+                            <th>मंगल</th>
+                            <th>बुध</th>
+                            <th>गुरु</th>
+                            <th>शुक्र</th>
+                            <th>शनि</th>
                         </tr>
                 """
-                slot_rows = pd.read_sql_query(f"SELECT period_name FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
-                valid_periods = [p for p in slot_rows['period_name'] if p not in ["प्रार्थना सभा", "मध्यांतर"]]
+                slot_rows = pd.read_sql_query(f"SELECT period_name, start_time, end_time FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+                time_map = {row['period_name']: f"{row['start_time']} - {row['end_time']}" for _, row in slot_rows.iterrows()}
+                valid_periods = slot_rows['period_name'].tolist()
                 for p in valid_periods:
-                    full_html += f"<tr><td style='border:1px solid #333; font-weight:bold;'>{p}</td>"
+                    slot_time = time_map.get(p, "")
+                    full_html += f"<tr><td><div style='font-size:12px; font-weight:bold;'>{p}</div><div style='font-size:10px; color:#555; margin-top:4px;'>{slot_time}</div></td>"
                     for d in ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार"]:
                         cell = cls_df[(cls_df['day'] == d) & (cls_df['period'] == p)]
                         if not cell.empty:
-                            t_name = get_short_code(cell.iloc[0]['teacher'], {})
-                            sub = cell.iloc[0]['subject'][:6]
-                            full_html += f"<td style='border:1px solid #333; text-align:center;'><b>{t_name}</b><br>{sub}</td>"
-                        else: full_html += "<td style='border:1px solid #333;'>-</td>"
+                            t_name = cell.iloc[0]['teacher']
+                            sub = cell.iloc[0]['subject']
+                            full_html += f"<td><div><b>{t_name}</b><br>{sub}</div></td>"
+                        else:
+                            full_html += "<td>-</td>"
                     full_html += "</tr>"
                 full_html += "</table></div>"
-            full_html += "<div style='clear:both;'></div>"
+            full_html += "</div>"
             show_print_preview(full_html, "कक्षा-वार समय सारणी", orientation="portrait", school_id=DEFAULT_SCHOOL)
 
 # ------------------------------------------------------------------------------
@@ -241,10 +275,12 @@ with tab_teacher:
                             <th style='border:1px solid #999; padding:4px;'>शनि</th>
                         </tr>
                 """
-                slot_rows = pd.read_sql_query(f"SELECT period_name FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
-                valid_periods = [p for p in slot_rows['period_name'] if p not in ["प्रार्थना सभा", "मध्यांतर"]]
+                slot_rows = pd.read_sql_query(f"SELECT period_name, start_time, end_time FROM time_slots WHERE school_id='{DEFAULT_SCHOOL}' ORDER BY slot_id", conn)
+                time_map = {row['period_name']: f"{row['start_time']} - {row['end_time']}" for _, row in slot_rows.iterrows()}
+                valid_periods = slot_rows['period_name'].tolist()
                 for p in valid_periods:
-                    full_html += f"<tr><td style='border:1px solid #999; padding:4px;'><b>{p}</b></td>"
+                    slot_time = time_map.get(p, "")
+                    full_html += f"<tr><td style='border:1px solid #999; padding:4px;'><div style='font-weight:bold;'>{p}</div><div style='font-size:10px; color:#555; margin-top:2px;'>{slot_time}</div></td>"
                     for d in ["सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार"]:
                         cell = t_df[(t_df['day'] == d) & (t_df['period'] == p)]
                         if not cell.empty:
